@@ -189,6 +189,11 @@
       package = jailed;
     };
 in rec {
+  # Opinionated pieces used by the NixOS/devshell setup: FLAKE_ROOT, devshell
+  # env forwarding, project-local persistent home, Herdr, git rebinding and
+  # jail-level read approval.
+  extras = import ./extras.nix {inherit pkgs;};
+
   inherit defaultGooseConfig defaultOpencodeConfig mkRtkShell;
   inherit mkJailedAgent mkEnvFromFile defaultBasePackages;
   inherit defaultPermissions defaultOpencodePermissions defaultGoosePermissions;

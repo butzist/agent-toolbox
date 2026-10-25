@@ -149,6 +149,29 @@ atb.lib.mkGooseJailed {
 }
 ```
 
+## NixOS / devshell extras
+
+`lib.extras` collects the opinionated pieces shared by the NixOS and devshell
+setup:
+
+- `persistHomePermissions` — when `FLAKE_ROOT` is set, creates
+  `$FLAKE_ROOT/.home`, points the jail's `HOME` at it, and persists state there.
+  Without `FLAKE_ROOT` the home stays an ephemeral tmpfs.
+- `flakeRootPermissions` — binds `FLAKE_ROOT` (or the cwd) read-write.
+- `devshellPermissions` — forwards the direnv / `nix develop` environment into
+  the jail and prepends the devshell `PATH`.
+- `gitPermissions` — rebinds the host `~/.config/git` into `JAIL_HOME/.config/git`.
+- `herdr { enable, package }` — forwards the Herdr socket/env and copies the
+  matching OpenCode plugin into the jail.
+- `allowAllReads config` — auto-approves reads of everything visible inside the
+  jail; it does not widen the jail's mounts.
+- `jailHome` — sets `JAIL_HOME` to `$HOME` unless `persistHomePermissions`
+  already moved it.
+
+Permission order matters: apply `persistHomePermissions`, then
+`flakeRootPermissions`, then `gitPermissions` and any other mounts that need to
+land in `JAIL_HOME`.
+
 ## Notice
 
 - `serena` is GPL-3.0-or-later. `solidlsp` remains MIT.
