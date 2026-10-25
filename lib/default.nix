@@ -180,7 +180,18 @@
         then permissions c
         else permissions
       )
-      ++ [(c.add-path "${pkgs.lib.getBin package}/bin")];
+      ++ [(c.add-path "${pkgs.lib.getBin package}/bin")]
+      # Host-side launchers can append bwrap arguments without rebuilding the
+      # agent. The value is split with normal shell word splitting, so paths
+      # with spaces are not supported.
+      ++ [
+        (c.add-runtime ''
+          if [ -n "''${JAIL_EXTRA_ARGS:-}" ]; then
+            read -r -a jail_extra_args <<< "$JAIL_EXTRA_ARGS"
+            RUNTIME_ARGS+=("''${jail_extra_args[@]}")
+          fi
+        '')
+      ];
     fwdPermissions = map (v: c.try-fwd-env v) (pkgs.lib.attrNames envFromFile);
     jailed = jail name package (permList ++ fwdPermissions);
   in

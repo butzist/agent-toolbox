@@ -99,8 +99,11 @@ into the jail with `try-fwd-env` (the secret never enters the store) — no
 per-variable `try-fwd-env` permission is needed in `permissions`.
 
 `mkJailedAgent` always adds the prewrapped package's `bin` to the jail `PATH`.
-Since `mkOpencode` / `mkGoose` merge `extraPackages` into that package, the same
-composable definition works for both jailed and free variants:
+A host-side wrapper can append extra bwrap arguments without rebuilding the
+agent by setting `JAIL_EXTRA_ARGS` (shell word splitting, so paths with spaces
+are not supported). Since `mkOpencode` / `mkGoose` merge `extraPackages` into
+that package, the same composable definition works for both jailed and free
+variants:
 
 `mkAgent` bundles one env-free package with both variants, and `mkEnvFromFile`
 is the host-side secret wrapper it uses:
