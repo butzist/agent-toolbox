@@ -220,7 +220,7 @@ in rec {
       standalone=0
       case "''${1:-}" in
         ""|run|mini|-*) standalone=1 ;;
-        upgrade|update|acp|api|debug|auth|mcp|plugin|models|stats|session|service|reload|pair|serve) ;;
+        upgrade|update|acp|debug|auth|mcp|plugin|session|service|pair|serve) ;;
         *) standalone=1 ;;
       esac
       if [ "$standalone" = 1 ]; then
