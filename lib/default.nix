@@ -213,6 +213,27 @@ in rec {
     wrapper = pkgs.writeShellScriptBin name ''
       ${mkExtraPath extraPackages}
       export OPENCODE_CONFIG=${configFile}
+      # A background server would escape the jail's lifecycle and could be
+      # shared across projects; keep opencode's server private to this run.
+      # Utility subcommands reject --standalone, so only add it to the TUI,
+      # run/mini, and TUI flags.
+      standalone=0
+      case "''${1:-}" in
+        ""|run|mini|-*) standalone=1 ;;
+        upgrade|update|acp|api|debug|auth|mcp|plugin|models|stats|session|service|reload|pair|serve) ;;
+        *) standalone=1 ;;
+      esac
+      if [ "$standalone" = 1 ]; then
+        for arg in "$@"; do
+          if [ "$arg" = "--standalone" ]; then
+            standalone=0
+            break
+          fi
+        done
+      fi
+      if [ "$standalone" = 1 ]; then
+        set -- --standalone "$@"
+      fi
       exec ${pkgs.lib.getExe package} "$@"
     '';
   in
