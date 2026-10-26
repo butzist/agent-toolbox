@@ -44,7 +44,7 @@ in {
   jailed = agent.makeJailedWith {
     permissions = c:
       atb.lib.defaultPermissions c
-      ++ atb.lib.extras.herdrEnv.permissions c;
+      ++ (atb.lib.extras.herdrEnv {}).permissions c;
   };
 }
 ```
