@@ -9,16 +9,6 @@
       export JAIL_HOME
     '')
   ];
-
-  herdrPlugin = package:
-    pkgs.runCommand "herdr-opencode-plugins" {
-      nativeBuildInputs = [package];
-    } ''
-      mkdir -p home/.config/opencode
-      HOME=$TMPDIR/home XDG_CONFIG_HOME=$TMPDIR/home/.config ${lib.getExe package} integration install opencode >/dev/null
-      mkdir -p $out
-      cp -a home/.config/opencode/. $out/
-    '';
 in rec {
   inherit jailHome;
 
@@ -56,7 +46,7 @@ in rec {
     (c.try-fwd-env "FLAKE_ROOT")
   ];
 
-  # Forward a project dev-shell environment. Activated by the direnv launcher
+  # Forward a project dev-shell environment. Activated by a direnv launcher
   # (AGENTS_FROM_DIRENV=1) or by a plain `nix develop` shell (IN_NIX_SHELL),
   # and prepends the devshell PATH without dropping the jail's own PATH.
   devshellPermissions = c: [
@@ -95,17 +85,10 @@ in rec {
       (c.unsafe-add-raw-args "--ro-bind-try \"$HOME/.config/git\" \"$JAIL_HOME/.config/git\"")
     ];
 
-  # Herdr socket/env plus the matching OpenCode plugin copied into the jail.
-  herdr = {
-    enable ? true,
-    package ? pkgs.herdr,
-  }: let
-    plugin =
-      if enable
-      then herdrPlugin package
-      else null;
-  in {
-    inherit plugin;
+  # Generic Herdr wiring: forward the pane/server environment Herdr injects so
+  # agents with native Herdr support can report state. Agent-specific plugins or
+  # extensions (opencode, pi, ...) belong to the consumer.
+  herdrEnv = {enable ? true}: {
     permissions = c:
       lib.optionals enable [
         (c.try-fwd-env "HERDR_SOCKET_PATH")
@@ -116,23 +99,5 @@ in rec {
         (c.try-fwd-env "HERDR_BIN_PATH")
         (c.try-readonly (c.noescape "~/.config/herdr"))
       ];
-    opencodePermissions = c:
-      lib.optionals enable [
-        (c.wrap-entry (entry: ''
-          mkdir -p "$HOME/.config/opencode"
-          cp -r --no-preserve=mode,ownership ${plugin}/. "$HOME/.config/opencode/"
-          chmod -R u+w "$HOME/.config/opencode"
-          ${entry}
-        ''))
-      ];
   };
-
-  # Auto-approve everything visible inside the jail. Does not widen mounts.
-  allowAllReads = config:
-    lib.recursiveUpdate config {
-      permission = {
-        external_directory = {"*" = "allow";};
-        read = {"*" = "allow";};
-      };
-    };
 }

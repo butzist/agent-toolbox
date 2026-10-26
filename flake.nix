@@ -1,9 +1,8 @@
 {
-  description = "Configurable (optionally jailed) goose + opencode with serena/mcpls MCP servers";
+  description = "Jail, env-forwarding and Herdr plumbing for preconfigured AI agents";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
 
     # Tracks main; flake.lock is pinned to the v2.0.0 release commit. Bump with
     # `nix flake update serena` when you want to follow newer main.
@@ -23,22 +22,11 @@
       overlays = [overlay];
     };
     # lib closes over the toolbox's pinned nixpkgs, so consumers do not pass one.
-    # Only the agent package itself can be overridden (`package = pkgs.opencode`).
+    # Only the wrapped package can be overridden by the caller.
     lib = import ./lib {inherit inputs pkgs;};
-  in
-    {
-      inherit lib;
-      overlays.default = overlay;
-    }
-    // inputs.flake-utils.lib.eachSystem [system] (_: {
-      packages = rec {
-        default = opencode;
-        opencode = lib.mkOpencode {};
-        goose = lib.mkGoose {};
-        opencode-jailed = lib.mkOpencodeJailed {};
-        goose-jailed = lib.mkGooseJailed {};
-      };
-
-      formatter = pkgs.alejandra;
-    });
+  in {
+    inherit lib;
+    overlays.default = overlay;
+    formatter.x86_64-linux = pkgs.alejandra;
+  };
 }
