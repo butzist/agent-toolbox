@@ -31,6 +31,21 @@ in {
   };
 
   # serena ships its own uv2nix flake; reuse it instead of rebuilding its
-  # Python closure here.
-  serena = inputs.serena.packages.${system}.serena;
+  # Python closure here. Clear PYTHONPATH at the boundary: an agent launched
+  # from a Python dev shell inherits that shell's site-packages, which shadow
+  # serena's own venv modules and break the MCP server on `import PIL._imaging`
+  # as soon as the interpreter versions differ.
+  serena = let
+    upstream = inputs.serena.packages.${system}.serena;
+  in
+    prev.symlinkJoin {
+      name = "serena";
+      paths = [upstream];
+      nativeBuildInputs = [prev.makeWrapper];
+      postBuild = ''
+        rm "$out/bin/serena"
+        makeWrapper ${upstream}/bin/serena "$out/bin/serena" --unset PYTHONPATH
+      '';
+      meta = upstream.meta or {};
+    };
 }

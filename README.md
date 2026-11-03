@@ -26,7 +26,9 @@ lib.jail               # jail.nix init
 lib.extras             # flake-root, devshell, persistent home, git, herdr env
 ```
 
-`overlays.default` provides `mcpls` and `serena`.
+`overlays.default` provides `mcpls` and `serena`. The `serena` wrapper clears
+`PYTHONPATH` before exec, so a consumer launched from a Python dev shell cannot
+shadow serena's own venv with another interpreter's site-packages.
 
 ## Building an agent
 
