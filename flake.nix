@@ -2,8 +2,6 @@
   description = "Jail, env-forwarding and Herdr plumbing for preconfigured AI agents";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-
     # Tracks main; flake.lock is pinned to the v2.0.0 release commit. Bump with
     # `nix flake update serena` when you want to follow newer main.
     serena.url = "github:oraios/serena/main";
@@ -15,18 +13,10 @@
 
   outputs = {self, ...} @ inputs: let
     overlay = import ./overlays {inherit inputs;};
-    system = "x86_64-linux";
-    pkgs = import inputs.nixpkgs {
-      inherit system;
-      config.allowUnfree = true;
-      overlays = [overlay];
-    };
-    # lib closes over the toolbox's pinned nixpkgs, so consumers do not pass one.
-    # Only the wrapped package can be overridden by the caller.
-    lib = import ./lib {inherit inputs pkgs;};
   in {
-    inherit lib;
+    # The caller supplies the package set, so the jail, its base tools and the
+    # combinators are built from the same nixpkgs as the agent package.
+    lib = pkgs: import ./lib {inherit inputs pkgs;};
     overlays.default = overlay;
-    formatter.x86_64-linux = pkgs.alejandra;
   };
 }

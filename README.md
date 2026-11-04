@@ -26,6 +26,10 @@ lib.jail               # jail.nix init
 lib.extras             # flake-root, devshell, persistent home, git, herdr env
 ```
 
+`lib` is a function of the consumer's package set (`lib pkgs`), so the jail,
+its base tools and the combinators are built from the same nixpkgs as the agent
+package; the flake has no nixpkgs input of its own.
+
 `overlays.default` provides `mcpls` and `serena`. The `serena` wrapper clears
 `PYTHONPATH` before exec, so a consumer launched from a Python dev shell cannot
 shadow serena's own venv with another interpreter's site-packages.
@@ -36,7 +40,8 @@ Everything agent-specific lives in your configuration. The shape is:
 
 ```nix
 let
-  agent = atb.lib.mkAgent {
+  atb = inputs.agent-toolbox.lib pkgs;
+  agent = atb.mkAgent {
     name = "my-agent";
     package = myAgentPackage;          # wrapper with config baked in
     envFromFile.API_KEY = tokenPath;   # read on the host, forwarded into the jail
@@ -45,8 +50,8 @@ in {
   inherit (agent) free;                # my-agent-free
   jailed = agent.makeJailedWith {
     permissions = c:
-      atb.lib.defaultPermissions c
-      ++ (atb.lib.extras.herdrEnv {}).permissions c;
+      atb.defaultPermissions c
+      ++ (atb.extras.herdrEnv {}).permissions c;
   };
 }
 ```
@@ -97,7 +102,7 @@ The shell accepts an `rtk` argument, so you can use a newer rtk from another
 flake:
 
 ```nix
-atb.lib.mkRtkShell { rtk = inputs.nix-ai-tools.packages.${system}.rtk; }
+atb.mkRtkShell { rtk = inputs.llm-agents.packages.${system}.rtk; }
 ```
 
 ## Notice
