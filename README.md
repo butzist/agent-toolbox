@@ -69,6 +69,17 @@ in {
 - **A host-side launcher can append arguments** with `JAIL_EXTRA_ARGS`
   (shell word splitting; paths with spaces are not supported).
 
+## OOM
+
+A jailed agent is expendable. `mkJailedAgent` writes `oom_score_adj=1000` (the
+kernel OOM killer's maximum preference) to its own `/proc` entry before
+bubblewrap starts, and every process inside the jail inherits it, so a runaway
+agent is killed before the desktop session is. Raising the score needs no
+privileges; lowering it does, so only values in `0..1000` are accepted.
+
+Set `oomScoreAdjust = 0` to leave the inherited score alone; the `free` variant
+is never adjusted.
+
 ## Extras
 
 `lib.extras` collects opt-in jail fragments. Order matters: apply

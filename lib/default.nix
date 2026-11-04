@@ -99,42 +99,56 @@
   # is a tmpfs, so state is discarded on exit. `envFromFile` vars are read into
   # the host environment by mkEnvFromFile; mkJailedAgent adds the jail.nix
   # try-fwd-env permissions so they are forwarded into the jail.
+  #
+  # `oomScoreAdjust` makes the agent the kernel OOM killer's first choice: the
+  # launcher writes the value to /proc/self/oom_score_adj before bubblewrap
+  # starts, and everything in the jail inherits it, so a runaway agent dies
+  # before the desktop session does. Only raising the score is possible without
+  # privileges; lowering it (negative values) needs CAP_SYS_RESOURCE and would
+  # be silently dropped, hence the assertion.
   mkJailedAgent = {
     name,
     package,
     permissions ? defaultPermissions,
     envFromFile ? {},
-  }: let
-    jail = inputs.jail-nix.lib.init pkgs;
-    c = jail.combinators;
-    # `permissions` is a list or a `combinators -> list` lambda (see jail.nix).
-    # The package's bin is always on PATH: a wrapped agent may bundle extra
-    # packages next to itself.
-    permList =
-      (
-        if pkgs.lib.isFunction permissions
-        then permissions c
-        else permissions
-      )
-      ++ [(c.add-path "${pkgs.lib.getBin package}/bin")]
-      # Host-side launchers can append bwrap arguments without rebuilding the
-      # agent. The value is split with normal shell word splitting, so paths
-      # with spaces are not supported.
-      ++ [
-        (c.add-runtime ''
-          if [ -n "''${JAIL_EXTRA_ARGS:-}" ]; then
-            read -r -a jail_extra_args <<< "$JAIL_EXTRA_ARGS"
-            RUNTIME_ARGS+=("''${jail_extra_args[@]}")
-          fi
+    oomScoreAdjust ? 1000,
+  }:
+    assert pkgs.lib.assertMsg (oomScoreAdjust >= 0 && oomScoreAdjust <= 1000)
+    "oomScoreAdjust must be between 0 and 1000: lowering it needs CAP_SYS_RESOURCE"; let
+      jail = inputs.jail-nix.lib.init pkgs;
+      c = jail.combinators;
+      # `permissions` is a list or a `combinators -> list` lambda (see jail.nix).
+      # The package's bin is always on PATH: a wrapped agent may bundle extra
+      # packages next to itself.
+      permList =
+        (
+          if pkgs.lib.isFunction permissions
+          then permissions c
+          else permissions
+        )
+        # Mark the whole jail as an OOM victim before anything else runs.
+        ++ pkgs.lib.optional (oomScoreAdjust != 0) (c.add-runtime ''
+          echo ${toString oomScoreAdjust} > /proc/self/oom_score_adj 2>/dev/null || true
         '')
-      ];
-    fwdPermissions = map (v: c.try-fwd-env v) (pkgs.lib.attrNames envFromFile);
-    jailed = jail name package (permList ++ fwdPermissions);
-  in
-    mkEnvFromFile {
-      inherit name envFromFile;
-      package = jailed;
-    };
+        ++ [(c.add-path "${pkgs.lib.getBin package}/bin")]
+        # Host-side launchers can append bwrap arguments without rebuilding the
+        # agent. The value is split with normal shell word splitting, so paths
+        # with spaces are not supported.
+        ++ [
+          (c.add-runtime ''
+            if [ -n "''${JAIL_EXTRA_ARGS:-}" ]; then
+              read -r -a jail_extra_args <<< "$JAIL_EXTRA_ARGS"
+              RUNTIME_ARGS+=("''${jail_extra_args[@]}")
+            fi
+          '')
+        ];
+      fwdPermissions = map (v: c.try-fwd-env v) (pkgs.lib.attrNames envFromFile);
+      jailed = jail name package (permList ++ fwdPermissions);
+    in
+      mkEnvFromFile {
+        inherit name envFromFile;
+        package = jailed;
+      };
 in rec {
   # Opinionated jail/launcher pieces shared by NixOS and devshell setups:
   # FLAKE_ROOT, devshell env forwarding, project-local persistent home, git
@@ -167,7 +181,8 @@ in rec {
     makeJailedWith = {
       permissions ? defaultPermissions,
       name ? agentName,
+      oomScoreAdjust ? 1000,
     }:
-      mkJailedAgent {inherit name package permissions envFromFile;};
+      mkJailedAgent {inherit name package permissions envFromFile oomScoreAdjust;};
   };
 }
