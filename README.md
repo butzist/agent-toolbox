@@ -21,9 +21,10 @@ lib.mkJailedAgent      # jail.nix wrapper for an already-built package
 lib.defaultPermissions # network + tz + base tools + rw cwd
 lib.defaultBasePackages
 lib.mkRtkShell         # drop-in shell that pipes -c commands through `rtk rewrite`
+lib.mkHerdrWrapped     # herdr launcher that keeps herdr-auth-proxy running
 lib.combinators        # jail.nix combinators bound to the toolbox's nixpkgs
 lib.jail               # jail.nix init
-lib.extras             # flake-root, devshell, persistent home, git, herdr env
+lib.extras             # flake-root, devshell, persistent home, git, herdr env/auth
 ```
 
 `lib` is a function of the consumer's package set (`lib pkgs`), so the jail,
@@ -99,6 +100,38 @@ land in `JAIL_HOME`.
   config directory read-only. Agents with native Herdr support (opencode,
   crush, pi) need only this; agent-specific plugins/extensions stay in the
   consumer.
+- `herdrAuth` — the jailed variant of the above: masks every real Herdr socket
+  with `/dev/null`, binds only herdr-auth-proxy's JWT-gated `auth.sock` into
+  `$JAIL_HOME`, and replaces an inherited bootstrap token with an orchestrator
+  token scoped to the agent's directory and workspace. `agentGrants` caps what
+  the jail may grant the agents it spawns. Takes the proxy package and must be
+  applied after `jailHome`/`persistHomePermissions`:
+
+  ```nix
+  (atb.extras.herdrAuth {herdrAuthProxy = myProxyPackage;}).permissions c
+  ```
+
+## Herdr
+
+`mkHerdrWrapped` returns a `herdr` launcher that starts
+[herdr-auth-proxy](https://github.com/butzist/herdr-auth-proxy) alongside the
+Herdr server, so the server inherits a bootstrap orchestrator token and every
+other client has to authenticate. CLI subcommands still talk to Herdr's real
+socket directly; `herdr server stop` keeps working when the running server has
+no usable token.
+
+```nix
+home.packages = [
+  (atb.mkHerdrWrapped {
+    herdr = inputs.llm-agents.packages.${system}.herdr;
+    herdrAuthProxy = inputs.herdr-auth-proxy.packages.${system}.default;
+  })
+  inputs.herdr-auth-proxy.packages.${system}.default
+];
+```
+
+The wrapper only manages the proxy session. Herdr's own config, themes,
+keymaps and agent integrations remain consumer-side.
 
 ## rtk
 

@@ -2,6 +2,8 @@
   inputs,
   pkgs,
 }: let
+  inherit (pkgs) lib;
+
   # Drop-in shell that pipes each `-c` command through `rtk rewrite`, then runs
   # the rewrite (or the original). Agents that let you override their shell
   # (opencode's `shell`, pi's `shellPath`, goose's `GOOSE_SHELL`, ...) can
@@ -33,6 +35,78 @@
         exec bash "$@"
       '';
     };
+
+  # Wrap a Herdr package so every launch goes through herdr-auth-proxy: the
+  # proxy starts alongside the server (or is re-adopted), and the server
+  # inherits a bootstrap orchestrator token as HERDR_AUTH_JWT. The proxy decides
+  # whether the running server has a usable token and fails closed otherwise;
+  # CLI subcommands still talk to Herdr's real socket directly.
+  #
+  # The Herdr server must be started through this wrapper (or restarted under
+  # it) so it picks up the token; `wrap` re-adopts the running server's token
+  # when possible. Put the result on PATH ahead of `herdr`, or use it directly.
+  mkHerdrWrapped = {
+    herdr,
+    herdrAuthProxy,
+  }: let
+    realHerdr = lib.getExe herdr;
+    proxy = lib.getExe' herdrAuthProxy "herdr-auth-proxy";
+  in
+    pkgs.writeShellScriptBin "herdr" ''
+      set -euo pipefail
+
+      realHerdr=${realHerdr}
+      proxy=${proxy}
+
+      session=""
+      prev=""
+      for arg in "$@"; do
+        if [ "$prev" = "--session" ]; then
+          session="$arg"
+        fi
+        case "$arg" in
+          --session=*) session="''${arg#--session=}" ;;
+        esac
+        prev="$arg"
+      done
+      # `herdr session attach <name>` is rewritten by herdr into a default launch.
+      if [ "''${1:-}" = "session" ] && [ "''${2:-}" = "attach" ] && [ -n "''${3:-}" ]; then
+        session="$3"
+      fi
+      # herdr omits HERDR_SESSION from the default session's environment.
+      if [ "$session" = "default" ]; then
+        session=""
+        unset HERDR_SESSION
+      fi
+      if [ -n "$session" ]; then
+        export HERDR_SESSION="$session"
+      fi
+
+      # CLI subcommands are the operator talking to herdr's real socket; only the
+      # TUI launcher (and the hidden client mode) need the proxy-wrapped env. In
+      # particular `herdr server stop` must pass through even when `wrap` would
+      # otherwise refuse to run because the running server has no usable token.
+      for arg in "$@"; do
+        case "$arg" in
+          --remote | --remote=* | --machine | --machine=* | --help | -h | --version | -V | --default-config | --skill)
+            exec "$realHerdr" "$@"
+            ;;
+        esac
+      done
+      case "''${1:-}" in
+        "" | client | --session | --session=* | --handoff) ;;
+        session)
+          if [ "''${2:-}" != "attach" ]; then
+            exec "$realHerdr" "$@"
+          fi
+          ;;
+        *)
+          exec "$realHerdr" "$@"
+          ;;
+      esac
+
+      exec "$proxy" wrap -- "$realHerdr" "$@"
+    '';
 
   # Default tools inside an agent jail. Deliberately no node/npm.
   defaultBasePackages = with pkgs; [
@@ -155,7 +229,7 @@ in rec {
   # rebinding, Herdr env and jail home.
   extras = import ./extras.nix {inherit pkgs;};
 
-  inherit mkRtkShell defaultBasePackages defaultPermissions;
+  inherit mkRtkShell mkHerdrWrapped defaultBasePackages defaultPermissions;
   inherit mkEnvFromFile mkJailedAgent;
   # jail.nix combinators, already bound to the toolbox's pinned nixpkgs.
   combinators = (inputs.jail-nix.lib.init pkgs).combinators;
