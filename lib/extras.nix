@@ -224,4 +224,52 @@ in rec {
         (c.try-fwd-env "HERDR_BIN_PATH")
       ];
   };
+
+  # Build a Herdr agent integration, keeping Herdr's plugin assets but owning
+  # the generated JSON files from Nix. `files` entries replace the whole file
+  # (no merge, no jq post-processing), so the consumer's value is the complete
+  # config. `home` is the config directory relative to HOME (e.g.
+  # ".config/opencode"). Returns {dir, permissions}; apply `permissions` after
+  # jailHome/persistHomePermissions.
+  mkHerdrIntegration = {
+    herdr,
+    target,
+    home,
+    files ? {},
+  }: let
+    rendered =
+      lib.mapAttrs (
+        rel: value:
+          (pkgs.formats.json {}).generate
+          "herdr-${target}-${lib.replaceStrings ["/"] ["-"] rel}"
+          value
+      )
+      files;
+    dir =
+      pkgs.runCommand "herdr-${target}-integration" {
+        nativeBuildInputs = [herdr];
+      } ''
+        mkdir -p home/${home}
+        HOME=$TMPDIR/home XDG_CONFIG_HOME=$TMPDIR/home/.config \
+          ${lib.getExe herdr} integration install ${target} >/dev/null
+        mkdir -p $out
+        cp -a home/${home}/. $out/
+        chmod -R u+w $out
+        ${lib.concatStringsSep "\n" (lib.mapAttrsToList (rel: file: ''
+            install -Dm644 ${file} "$out/${rel}"
+          '')
+          rendered)}
+      '';
+  in {
+    inherit dir;
+    permissions = c: [
+      (c.wrap-entry (entry: ''
+        target_dir="''${JAIL_HOME:-$HOME}/${home}"
+        mkdir -p "$target_dir"
+        cp -r --no-preserve=mode,ownership ${dir}/. "$target_dir/"
+        chmod -R u+w "$target_dir"
+        ${entry}
+      ''))
+    ];
+  };
 }
