@@ -224,38 +224,4 @@ in rec {
         (c.try-fwd-env "HERDR_BIN_PATH")
       ];
   };
-
-  # Build a Herdr agent integration from Herdr's own plugin assets. Herdr's
-  # generated config is kept as-is; consumers can link the files from `dir`
-  # (host) or apply `permissions` (jail). `home` is the config directory
-  # relative to HOME (e.g. ".config/opencode"). Returns {dir, permissions};
-  # apply `permissions` after jailHome/persistHomePermissions.
-  mkHerdrIntegration = {
-    herdr,
-    target,
-    home,
-  }: let
-    dir =
-      pkgs.runCommand "herdr-${target}-integration" {
-        nativeBuildInputs = [herdr];
-      } ''
-        mkdir -p home/${home}
-        HOME=$TMPDIR/home XDG_CONFIG_HOME=$TMPDIR/home/.config \
-          ${lib.getExe herdr} integration install ${target} >/dev/null
-        mkdir -p $out
-        cp -a home/${home}/. $out/
-        chmod -R u+w $out
-      '';
-  in {
-    inherit dir;
-    permissions = c: [
-      (c.wrap-entry (entry: ''
-        target_dir="''${JAIL_HOME:-$HOME}/${home}"
-        mkdir -p "$target_dir"
-        cp -r --no-preserve=mode,ownership ${dir}/. "$target_dir/"
-        chmod -R u+w "$target_dir"
-        ${entry}
-      ''))
-    ];
-  };
 }

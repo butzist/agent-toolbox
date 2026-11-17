@@ -111,28 +111,6 @@ land in `JAIL_HOME`.
   (atb.extras.herdrAuth {herdrAuthProxy = myProxyPackage;}).permissions c
   ```
 
-- `mkHerdrIntegration` — builds Herdr's integration assets for one agent
-  (`herdr integration install <target>`), including the generated config files
-  and plugin code. Herdr owns both; consumers do not rewrite them. Returns
-  `{dir, permissions}`; apply `permissions` after
-  `jailHome`/`persistHomePermissions`:
-
-  ```nix
-  let
-    opencodeHerdr = atb.extras.mkHerdrIntegration {
-      herdr = herdrPackage;
-      target = "opencode";
-      home = ".config/opencode";
-    };
-  in
-  opencodeHerdr.permissions c
-  ```
-
-  For a host (non-jail) config, link the files from `integration.dir` instead,
-  for example with `xdg.configFile`. Agent-specific settings that belong
-  outside the integration (for example OpenCode CLI options) stay in the
-  consumer's own agent wrapper.
-
 ## Herdr
 
 `mkHerdrWrapped` returns a `herdr` launcher that starts
@@ -153,8 +131,9 @@ home.packages = [
 ```
 
 The wrapper only manages the proxy session. Herdr's own config, themes and
-keymaps remain consumer-side; agent integrations can be prepared with
-`mkHerdrIntegration` above.
+keymaps remain consumer-side; run `herdr integration install <agent>` from the
+consumer's activation or launch wrapper so the integration matches the Herdr
+binary.
 
 ## rtk
 
