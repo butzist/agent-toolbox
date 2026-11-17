@@ -225,26 +225,16 @@ in rec {
       ];
   };
 
-  # Build a Herdr agent integration, keeping Herdr's plugin assets but owning
-  # the generated JSON files from Nix. `files` entries replace the whole file
-  # (no merge, no jq post-processing), so the consumer's value is the complete
-  # config. `home` is the config directory relative to HOME (e.g.
-  # ".config/opencode"). Returns {dir, permissions}; apply `permissions` after
-  # jailHome/persistHomePermissions.
+  # Build a Herdr agent integration from Herdr's own plugin assets. Herdr's
+  # generated config is kept as-is; consumers can link the files from `dir`
+  # (host) or apply `permissions` (jail). `home` is the config directory
+  # relative to HOME (e.g. ".config/opencode"). Returns {dir, permissions};
+  # apply `permissions` after jailHome/persistHomePermissions.
   mkHerdrIntegration = {
     herdr,
     target,
     home,
-    files ? {},
   }: let
-    rendered =
-      lib.mapAttrs (
-        rel: value:
-          (pkgs.formats.json {}).generate
-          "herdr-${target}-${lib.replaceStrings ["/"] ["-"] rel}"
-          value
-      )
-      files;
     dir =
       pkgs.runCommand "herdr-${target}-integration" {
         nativeBuildInputs = [herdr];
@@ -255,10 +245,6 @@ in rec {
         mkdir -p $out
         cp -a home/${home}/. $out/
         chmod -R u+w $out
-        ${lib.concatStringsSep "\n" (lib.mapAttrsToList (rel: file: ''
-            install -Dm644 ${file} "$out/${rel}"
-          '')
-          rendered)}
       '';
   in {
     inherit dir;
